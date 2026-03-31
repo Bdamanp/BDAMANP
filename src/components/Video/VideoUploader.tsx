@@ -1,16 +1,19 @@
 import { useRef } from 'react';
+import type { Point } from '../../utils/bezier';
 import type { TrackingStatus } from '../../hooks/useVideoTracking';
+import { VideoPathOverlay } from './VideoPathOverlay';
 
 interface VideoUploaderProps {
   onFile: (file: File) => void;
   videoUrl: string | null;
+  rawVideoPoints: Point[];
   status: TrackingStatus;
   progress: number;
   error: string | null;
   onClear: () => void;
 }
 
-export function VideoUploader({ onFile, videoUrl, status, progress, error, onClear }: VideoUploaderProps) {
+export function VideoUploader({ onFile, videoUrl, rawVideoPoints, status, progress, error, onClear }: VideoUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -35,11 +38,16 @@ export function VideoUploader({ onFile, videoUrl, status, progress, error, onCle
         </div>
       ) : (
         <div className="space-y-2">
-          <video
-            src={videoUrl}
-            controls
-            className="w-full rounded-lg max-h-48 bg-black"
-          />
+          {/* Show overlay once tracking is done, plain video while processing */}
+          {status === 'done' && rawVideoPoints.length > 0 ? (
+            <VideoPathOverlay videoUrl={videoUrl} rawPoints={rawVideoPoints} />
+          ) : (
+            <video
+              src={videoUrl}
+              controls
+              className="w-full rounded-lg max-h-64 bg-black"
+            />
+          )}
           <button
             onClick={onClear}
             className="text-xs text-slate-400 hover:text-red-400 transition-colors"
@@ -74,7 +82,7 @@ export function VideoUploader({ onFile, videoUrl, status, progress, error, onCle
 
       {status === 'done' && (
         <p className="text-green-400 text-xs flex items-center gap-1">
-          <span>✓</span> Ball path detected and applied
+          <span>✓</span> Ball path overlaid on video — play to animate the trail
         </p>
       )}
 

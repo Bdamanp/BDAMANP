@@ -34,6 +34,7 @@ export default function App() {
     error: videoError,
     extractPathFromVideo,
     videoUrl,
+    rawVideoPoints,
     clearVideo,
   } = useVideoTracking();
 
@@ -107,6 +108,7 @@ export default function App() {
           <VideoUploader
             onFile={handleVideoFile}
             videoUrl={videoUrl}
+            rawVideoPoints={rawVideoPoints}
             status={videoStatus}
             progress={videoProgress}
             error={videoError}

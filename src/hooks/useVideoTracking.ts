@@ -3,12 +3,16 @@ import type { Point } from '../utils/bezier';
 
 export type TrackingStatus = 'idle' | 'loading' | 'processing' | 'done' | 'error';
 
+export const SAMPLE_W = 320;
+export const SAMPLE_H = 240;
+
 export interface UseVideoTrackingReturn {
   status: TrackingStatus;
   progress: number;
   error: string | null;
   extractPathFromVideo: (file: File, onPath: (points: Point[]) => void) => Promise<void>;
   videoUrl: string | null;
+  rawVideoPoints: Point[];   // video-space coords (in SAMPLE_W x SAMPLE_H space) for overlay
   clearVideo: () => void;
 }
 
@@ -20,9 +24,7 @@ function detectBallCentroid(
 ): { x: number; y: number } | null {
   const data = ctx.getImageData(0, 0, width, height).data;
 
-  // Find dark circular region (ball is dark against the light maple lane)
-  // Use a simple brightness threshold scan
-  const THRESHOLD = 80; // pixels darker than this are candidates
+  const THRESHOLD = 80;
   let sumX = 0;
   let sumY = 0;
   let count = 0;
@@ -42,7 +44,7 @@ function detectBallCentroid(
     }
   }
 
-  if (count < 50) return null; // Too few dark pixels
+  if (count < 50) return null;
   return { x: sumX / count, y: sumY / count };
 }
 
@@ -51,6 +53,7 @@ export function useVideoTracking(): UseVideoTrackingReturn {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [rawVideoPoints, setRawVideoPoints] = useState<Point[]>([]);
   const urlRef = useRef<string | null>(null);
 
   const clearVideo = useCallback(() => {
@@ -59,6 +62,7 @@ export function useVideoTracking(): UseVideoTrackingReturn {
     setStatus('idle');
     setProgress(0);
     setError(null);
+    setRawVideoPoints([]);
   }, []);
 
   const extractPathFromVideo = useCallback(
@@ -66,15 +70,14 @@ export function useVideoTracking(): UseVideoTrackingReturn {
       setStatus('loading');
       setError(null);
       setProgress(0);
+      setRawVideoPoints([]);
 
-      // Create object URL for the video
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       const url = URL.createObjectURL(file);
       urlRef.current = url;
       setVideoUrl(url);
 
       try {
-        // Use HTML5 video + canvas to extract frames
         const video = document.createElement('video');
         video.src = url;
         video.crossOrigin = 'anonymous';
@@ -91,8 +94,6 @@ export function useVideoTracking(): UseVideoTrackingReturn {
         const FPS = 15;
         const totalFrames = Math.floor(duration * FPS);
         const offscreen = document.createElement('canvas');
-        const SAMPLE_W = 320;
-        const SAMPLE_H = 240;
         offscreen.width = SAMPLE_W;
         offscreen.height = SAMPLE_H;
         const ctx = offscreen.getContext('2d')!;
@@ -121,7 +122,10 @@ export function useVideoTracking(): UseVideoTrackingReturn {
           throw new Error('Could not detect ball path. Try adjusting video lighting or use manual draw mode.');
         }
 
-        // Normalize coordinates to lane canvas space (320 x 720)
+        // Store raw video-space points for the overlay
+        setRawVideoPoints(rawPoints);
+
+        // Normalize to lane canvas space
         const minY = Math.min(...rawPoints.map((p) => p.y));
         const maxY = Math.max(...rawPoints.map((p) => p.y));
         const minX = Math.min(...rawPoints.map((p) => p.x));
@@ -132,7 +136,6 @@ export function useVideoTracking(): UseVideoTrackingReturn {
 
         const normalized = rawPoints.map((p) => ({
           x: ((p.x - minX) / (maxX - minX || 1)) * LANE_W,
-          // Ball moves from foul line (bottom) to pins (top) → invert Y
           y: LANE_H - ((p.y - minY) / (maxY - minY || 1)) * LANE_H,
           t: p.t,
         }));
@@ -148,5 +151,5 @@ export function useVideoTracking(): UseVideoTrackingReturn {
     []
   );
 
-  return { status, progress, error, extractPathFromVideo, videoUrl, clearVideo };
+  return { status, progress, error, extractPathFromVideo, videoUrl, rawVideoPoints, clearVideo };
 }
